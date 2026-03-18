@@ -1,0 +1,223 @@
+{% extends 'core/base.html' %}
+{% block title %}New Analysis -- InsightPulse{% endblock %}
+{% block breadcrumb %}New Analysis{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <h1 class="page-title">New Analysis</h1>
+  <p class="page-subtitle">Fetch Reddit discussions, run NLP analysis, and store results in Hadoop.</p>
+</div>
+
+<div class="grid-2" style="align-items: start; max-width: 960px;">
+
+  <!--  Setup form  -->
+  <div class="card" id="setup-card">
+    <div class="card-header">
+      <span class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        Analysis Setup
+      </span>
+    </div>
+    <div class="card-body">
+
+      <div class="form-group">
+        <label class="form-label">Product Name</label>
+        <input type="text" id="product-input" class="form-control"
+               placeholder="e.g. iPhone 17, Samsung Galaxy S25, AirPods Pro..."
+               autocomplete="off">
+        <div class="form-hint">Enter any product keyword to search Reddit discussions.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Posts per Subreddit</label>
+        <select id="limit-select" class="form-control">
+          <option value="100">100 posts -- Quick demo</option>
+          <option value="200" selected>200 posts -- Recommended</option>
+          <option value="500">500 posts -- Deep analysis</option>
+          <option value="1000">1000 posts -- Full dataset</option>
+        </select>
+        <div class="form-hint">Higher limits take longer but produce richer insights.</div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Pipeline preview -- from view context, no inline split needed -->
+      <div class="section-label">Pipeline Preview</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px;">
+        {% for step in analyze_steps %}
+        <div style="display:flex;align-items:center;gap:8px;
+                    font-size:0.825rem;color:var(--text-secondary);">
+          <span style="width:18px;height:18px;border-radius:50%;background:var(--blue-pale);
+                       display:flex;align-items:center;justify-content:center;
+                       font-size:0.65rem;font-weight:700;color:var(--blue);flex-shrink:0;">
+            {{ forloop.counter }}
+          </span>
+          {{ step }}
+        </div>
+        {% endfor %}
+      </div>
+
+      <button id="run-btn" class="btn btn-primary"
+              style="width:100%;justify-content:center;padding:11px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             style="width:15px;height:15px;">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        Start Analysis
+      </button>
+
+    </div>
+  </div>
+
+  <!--  Live progress panel  -->
+  <div class="card" id="progress-card" style="display:none;">
+    <div class="card-header">
+      <span class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        Pipeline Running
+      </span>
+      <span class="badge badge-running" id="status-badge">
+        <span class="status-dot running"></span>&nbsp;Running
+      </span>
+    </div>
+    <div class="card-body">
+
+      <div style="font-size:1.1rem;font-weight:600;color:var(--text-primary);margin-bottom:4px;"
+           id="progress-product"></div>
+      <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:20px;"
+           id="progress-message">Initialising...</div>
+
+      <!-- Progress bar -->
+      <div style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:0.78rem;font-weight:600;color:var(--text-secondary);"
+              id="progress-step-label">Starting</span>
+        <span style="font-family:var(--font-mono);font-size:0.82rem;font-weight:600;color:var(--blue);"
+              id="progress-pct">0%</span>
+      </div>
+      <div class="progress-track" style="height:8px;margin-bottom:24px;">
+        <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+      </div>
+
+      <!-- Step checklist -- from view context -->
+      <div class="section-label">Steps</div>
+      <div id="step-list" style="display:flex;flex-direction:column;gap:4px;">
+        {% for item in step_checklist %}
+        <div class="step-row" data-step="{{ item.key }}"
+             style="display:flex;align-items:center;gap:10px;padding:8px 10px;
+                    border-radius:6px;font-size:0.845rem;color:var(--text-muted);">
+          <span class="step-icon"
+                style="width:18px;height:18px;border-radius:50%;
+                       border:1.5px solid var(--border-strong);flex-shrink:0;
+                       display:flex;align-items:center;justify-content:center;
+                       font-size:0.65rem;">
+          </span>
+          {{ item.label }}
+        </div>
+        {% endfor %}
+      </div>
+
+      <hr class="divider">
+      <div style="font-size:0.78rem;color:var(--text-muted);text-align:center;"
+           id="progress-eta">
+        Estimated time: 3-6 minutes depending on dataset size
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const STEP_ORDER   = ['fetching','preprocessing','sentiment','emotion','hdfs','hive','complete'];
+
+let jobId     = null;
+let pollTimer = null;
+
+document.getElementById('run-btn').addEventListener('click', async () => {
+  const product = document.getElementById('product-input').value.trim();
+  const limit   = document.getElementById('limit-select').value;
+
+  if (!product) {
+    document.getElementById('product-input').style.borderColor = 'var(--red)';
+    document.getElementById('product-input').focus();
+    return;
+  }
+
+  // Switch panels
+  document.getElementById('setup-card').style.display    = 'none';
+  document.getElementById('progress-card').style.display = 'block';
+  document.getElementById('progress-product').textContent = product;
+
+  const formData = new FormData();
+  formData.append('product',             product);
+  formData.append('fetch_limit',         limit);
+  formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+  const res  = await fetch('{% url "run_analysis" %}', { method: 'POST', body: formData });
+  const data = await res.json();
+
+  if (data.error) { alert(data.error); return; }
+
+  jobId     = data.job_id;
+  pollTimer = setInterval(poll, 2000);
+});
+
+async function poll() {
+  const res  = await fetch(`/analyze/status/${jobId}/`);
+  const data = await res.json();
+
+  document.getElementById('progress-fill').style.width       = data.progress + '%';
+  document.getElementById('progress-pct').textContent        = data.progress + '%';
+  document.getElementById('progress-step-label').textContent = data.label;
+  document.getElementById('progress-message').textContent    = data.message || data.label;
+
+  updateSteps(data.status);
+
+  if (data.complete) {
+    clearInterval(pollTimer);
+    document.getElementById('status-badge').innerHTML  = '<span class="status-dot complete"></span>&nbsp;Complete';
+    document.getElementById('status-badge').className  = 'badge badge-complete';
+    document.getElementById('progress-eta').innerHTML  =
+      '<span style="color:var(--green);font-weight:600;"> Analysis complete!</span> Redirecting...';
+    setTimeout(() => { window.location.href = `/dashboard/${jobId}/`; }, 1500);
+  }
+
+  if (data.failed) {
+    clearInterval(pollTimer);
+    document.getElementById('status-badge').innerHTML = ' Failed';
+    document.getElementById('status-badge').className = 'badge badge-failed';
+    const msg = document.getElementById('progress-message');
+    msg.style.color   = 'var(--red)';
+    msg.textContent   = data.error || 'Pipeline failed.';
+  }
+}
+
+function updateSteps(currentStatus) {
+  const currentIdx = STEP_ORDER.indexOf(currentStatus);
+  document.querySelectorAll('.step-row').forEach(row => {
+    const rowStep = row.dataset.step;
+    const rowIdx  = STEP_ORDER.indexOf(rowStep);
+    const icon    = row.querySelector('.step-icon');
+    if (rowIdx < currentIdx) {
+      row.style.color        = 'var(--green)';
+      icon.style.background  = 'var(--green)';
+      icon.style.borderColor = 'var(--green)';
+      icon.textContent       = '';
+      icon.style.color       = 'white';
+    } else if (rowStep === currentStatus) {
+      row.style.color        = 'var(--blue)';
+      icon.style.borderColor = 'var(--blue)';
+      icon.innerHTML = '<div style="width:8px;height:8px;background:var(--blue);'
+                     + 'border-radius:50%;animation:pulse 1s infinite"></div>';
+    }
+  });
+}
+</script>
+{% endblock %}

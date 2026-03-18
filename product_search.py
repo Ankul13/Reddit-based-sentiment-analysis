@@ -11,8 +11,12 @@ import pandas as pd
 import json
 import os
 
+BASE_DIR =  os.path.dirname(os.path.abspath(__file__))
+# base_dir = os.path.dirname(os.path.abspath(__file__))
+
+config_path = os.path.join(BASE_DIR, "config.json")
 # Load credentials
-with open("config.json") as f:
+with open(config_path) as f:
     cfg = json.load(f)
 
 reddit = praw.Reddit(

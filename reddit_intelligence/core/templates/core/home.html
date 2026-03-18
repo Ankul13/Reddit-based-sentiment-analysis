@@ -1,0 +1,167 @@
+{% extends 'core/base.html' %}
+{% block title %}InsightPulse -- Reddit Product Intelligence{% endblock %}
+{% block breadcrumb %}Home{% endblock %}
+
+{% block content %}
+
+<!--  Hero  -->
+<div style="background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 50%, #1e3a8a 100%);
+            border-radius: 16px; padding: 48px 40px; margin-bottom: 28px;
+            position: relative; overflow: hidden;">
+
+  <div style="position:absolute;inset:0;opacity:0.06;
+    background-image: linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px);
+    background-size: 40px 40px;"></div>
+
+  <div style="position:relative; max-width: 600px;">
+    <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.12);
+                border:1px solid rgba(255,255,255,0.2);border-radius:20px;
+                padding:4px 12px;font-size:0.75rem;font-weight:600;color:rgba(255,255,255,0.85);
+                letter-spacing:0.06em;text-transform:uppercase;margin-bottom:16px;">
+      <span style="width:7px;height:7px;background:#4ade80;border-radius:50%;"></span>
+      AI-Powered Analytics Platform
+    </div>
+
+    <h1 style="font-family: var(--font-serif); font-size: 2.4rem; font-weight: 600;
+               color: #ffffff; line-height: 1.18; letter-spacing: -0.02em; margin-bottom: 14px;">
+      Understand what customers<br>really think about products.
+    </h1>
+
+    <p style="font-size:0.95rem; color:rgba(255,255,255,0.7); line-height:1.65; margin-bottom:28px;">
+      Analyse thousands of Reddit discussions in minutes. Get sentiment breakdowns,
+      emotion detection, and actionable insights -- stored and queried at scale with
+      Hadoop &amp; Hive.
+    </p>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <a href="{% url 'analyze' %}" class="btn"
+         style="background:white;color:var(--blue);font-weight:600;padding:11px 24px;font-size:0.9rem;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             style="width:16px;height:16px;">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Start Analysis
+      </a>
+      <a href="{% url 'about' %}" class="btn"
+         style="background:rgba(255,255,255,0.1);color:white;
+                border:1px solid rgba(255,255,255,0.25);padding:11px 24px;font-size:0.9rem;">
+        How It Works
+      </a>
+    </div>
+  </div>
+</div>
+
+<!--  Platform stats  -->
+<div class="kpi-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 28px;">
+  <div class="kpi-card" style="--kpi-color: var(--blue);">
+    <div class="kpi-label">Total Analyses</div>
+    <div class="kpi-value">{{ total_analyses }}</div>
+    <div class="kpi-sub">pipeline runs completed</div>
+  </div>
+  <div class="kpi-card" style="--kpi-color: var(--green);">
+    <div class="kpi-label">Posts Analysed</div>
+    <div class="kpi-value">{{ total_posts|default:"0" }}</div>
+    <div class="kpi-sub">Reddit posts processed</div>
+  </div>
+  <div class="kpi-card" style="--kpi-color: var(--amber);">
+    <div class="kpi-label">Models Used</div>
+    <div class="kpi-value">3</div>
+    <div class="kpi-sub">VADER . TextBlob . DistilRoBERTa</div>
+  </div>
+</div>
+
+<!--  Pipeline overview + Recent analyses  -->
+<div class="grid-2" style="margin-bottom: 28px; align-items: start;">
+
+  <!-- Pipeline steps -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        Analysis Pipeline
+      </span>
+    </div>
+    <div class="card-body" style="padding: 0;">
+      {% for step in pipeline_steps %}
+      <div style="display:flex;align-items:center;gap:14px;padding:12px 20px;
+                  border-bottom:1px solid var(--border);
+                  {% if forloop.last %}border-bottom:none;{% endif %}">
+        <div style="width:26px;height:26px;border-radius:50%;background:var(--blue-pale);
+                    display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <span style="font-family:var(--font-mono);font-size:0.7rem;font-weight:700;color:var(--blue);">
+            {{ forloop.counter }}
+          </span>
+        </div>
+        <span style="font-size:0.875rem;color:var(--text-primary);">{{ step }}</span>
+        <span style="margin-left:auto;font-size:0.72rem;color:var(--green);font-weight:600;"> Active</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Recent analyses -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        Recent Analyses
+      </span>
+      <a href="{% url 'history' %}" style="font-size:0.8rem;color:var(--blue);">View all -></a>
+    </div>
+    <div class="card-body" style="padding:0;">
+      {% if recent_jobs %}
+        {% for job in recent_jobs %}
+        <a href="{% url 'dashboard' job.id %}"
+           style="display:flex;align-items:center;justify-content:space-between;
+                  padding:13px 20px;
+                  border-bottom:1px solid var(--border);
+                  {% if forloop.last %}border-bottom:none;{% endif %}
+                  text-decoration:none;transition:background 0.1s;">
+          <div>
+            <div style="font-size:0.88rem;font-weight:600;color:var(--text-primary);">
+              {{ job.product }}
+            </div>
+            <div style="font-size:0.76rem;color:var(--text-muted);margin-top:2px;">
+              {{ job.total_posts }} posts . {{ job.created_at|date:"d M Y, H:i" }}
+            </div>
+          </div>
+          <span class="badge badge-complete">Complete</span>
+        </a>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <p>No analyses yet.<br>
+            <a href="{% url 'analyze' %}">Run your first analysis -></a>
+          </p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!--  Tech stack badges  -->
+<div class="card">
+  <div class="card-body" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+    <span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;
+                 letter-spacing:0.08em;color:var(--text-muted);margin-right:6px;">
+      Tech Stack
+    </span>
+    {% for tech in tech_stack %}
+    <span style="background:var(--bg-base);border:1px solid var(--border-strong);
+                 border-radius:6px;padding:4px 11px;font-size:0.78rem;
+                 font-family:var(--font-mono);color:var(--text-secondary);">
+      {{ tech }}
+    </span>
+    {% endfor %}
+  </div>
+</div>
+
+{% endblock %}

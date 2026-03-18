@@ -1,0 +1,149 @@
+{% extends 'core/base.html' %}
+{% load core_tags %}
+{% block title %}Hive Queries -- InsightPulse{% endblock %}
+{% block breadcrumb %}Hive Query Explorer{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <h1 class="page-title">Hive Query Explorer</h1>
+  <p class="page-subtitle">SQL analytics layer on top of HDFS. Queries run directly against Apache Hive.</p>
+</div>
+
+<div style="display:grid;grid-template-columns:260px 1fr;gap:20px;align-items:start;">
+
+  <!--  Query sidebar  -->
+  <div class="card" style="position:sticky;top:72px;">
+    <div class="card-header">
+      <span class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        Queries
+      </span>
+    </div>
+    <div style="padding:8px 0;">
+      {% for key, q in queries.items %}
+      <a href="?query={{ key }}"
+         style="display:block;padding:10px 16px;font-size:0.855rem;border-left:3px solid transparent;
+                {% if key == selected_key %}
+                  background:var(--blue-pale);border-left-color:var(--blue);
+                  color:var(--blue);font-weight:600;
+                {% else %}
+                  color:var(--text-secondary);
+                {% endif %}
+                text-decoration:none;transition:all 0.1s;">
+        {{ q.title }}
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!--  Query panel  -->
+  <div>
+
+    <!-- Query info -->
+    <div class="card mb-20">
+      <div class="card-header">
+        <span class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          {{ query_info.title }}
+        </span>
+        {% if hive_available %}
+          <span class="badge badge-complete">
+            <span class="status-dot complete" style="margin-right:4px;"></span>Hive Connected
+          </span>
+        {% else %}
+          <span class="badge badge-pending">Hive Not Connected</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        <p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:16px;">
+          {{ query_info.description }}
+        </p>
+
+        <!-- HQL -->
+        <div class="section-label">HiveQL</div>
+        <pre style="background:var(--bg-base);border:1px solid var(--border);border-radius:8px;
+                    padding:14px 16px;font-family:var(--font-mono);font-size:0.8rem;
+                    color:var(--text-primary);overflow-x:auto;line-height:1.7;
+                    white-space:pre-wrap;">{{ query_info.hql }}</pre>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Query Results
+        </span>
+        {% if rows %}
+          <span style="font-size:0.78rem;color:var(--text-muted);">{{ rows|length }} rows returned</span>
+        {% endif %}
+      </div>
+
+      <div class="card-body">
+        {% if hive_error == 'not_found' %}
+          <div style="background:var(--amber-pale);border:1px solid #fde68a;border-radius:8px;
+                      padding:14px 16px;font-size:0.85rem;color:#92400e;line-height:1.6;">
+            <strong>Hive not found on PATH.</strong> Start Hadoop and Hive in WSL, then refresh.
+            <pre style="margin-top:10px;font-family:var(--font-mono);font-size:0.78rem;
+                        background:rgba(0,0,0,0.05);padding:10px;border-radius:4px;">
+start-all.sh
+hive --service metastore &amp;
+hive -f hive_queries.sql</pre>
+          </div>
+        {% elif hive_error == 'timeout' %}
+          <div style="background:var(--red-pale);border:1px solid #fca5a5;border-radius:8px;
+                      padding:14px 16px;font-size:0.85rem;color:var(--red);">
+            <strong>Query timed out (120s).</strong> Hive may be overloaded or the table is very large.
+          </div>
+        {% elif hive_error == 'no_data' or not hive_error and not rows %}
+          <div class="empty-state" style="padding:40px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <ellipse cx="12" cy="5" rx="9" ry="3"/>
+              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+            </svg>
+            <p>No data yet. Run an analysis first so results are uploaded to HDFS.</p>
+          </div>
+        {% elif hive_error %}
+          <div style="background:var(--red-pale);border:1px solid #fca5a5;border-radius:8px;
+                      padding:14px 16px;font-size:0.85rem;color:var(--red);line-height:1.6;">
+            <strong>Hive error:</strong>
+            <pre style="margin-top:8px;font-family:var(--font-mono);font-size:0.76rem;
+                        white-space:pre-wrap;background:rgba(0,0,0,0.04);padding:8px;border-radius:4px;">{{ hive_error }}</pre>
+          </div>
+        {% elif rows %}
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  {% for col in columns %}
+                  <th>{{ col }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in rows %}
+                <tr>
+                  {% for cell in row %}
+                  <td class="mono">{{ cell }}</td>
+                  {% endfor %}
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty-state" style="padding:40px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            <p>No results. Run an analysis first and upload data to HDFS.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}

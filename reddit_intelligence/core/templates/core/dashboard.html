@@ -1,0 +1,309 @@
+{% extends 'core/base.html' %}
+{% load core_tags %}
+{% block title %}Dashboard -- {{ job.product }} -- InsightPulse{% endblock %}
+{% block breadcrumb %}Dashboard . {{ job.product }}{% endblock %}
+
+{% block content %}
+
+<!--  Page header  -->
+<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
+  <div>
+    <h1 class="page-title">{{ job.product }}</h1>
+    <div style="font-size:0.85rem;color:var(--text-muted);margin-top:4px;">
+      Analysed {{ job.created_at|date:"d M Y, H:i" }}
+      {% if duration %} . Completed in {{ duration }}s{% endif %}
+      . {{ total }} posts
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <a href="{% url 'analyze' %}" class="btn btn-secondary">New Analysis</a>
+    <a href="{% url 'history' %}"  class="btn btn-secondary"><- History</a>
+  </div>
+</div>
+
+{% if empty %}
+<div class="card">
+  <div class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+    <p>No results found for this analysis.</p>
+  </div>
+</div>
+{% else %}
+
+<!--  KPI row  -->
+<div class="kpi-grid">
+  <div class="kpi-card" style="--kpi-color:var(--blue);">
+    <div class="kpi-label">Total Posts</div>
+    <div class="kpi-value">{{ total }}</div>
+    <div class="kpi-sub">Reddit posts analysed</div>
+  </div>
+  <div class="kpi-card" style="--kpi-color:var(--green);">
+    <div class="kpi-label">Positive</div>
+    <div class="kpi-value">{{ pos_pct }}%</div>
+    <div class="kpi-sub">{{ pos }} posts</div>
+  </div>
+  <div class="kpi-card" style="--kpi-color:var(--red);">
+    <div class="kpi-label">Negative</div>
+    <div class="kpi-value">{{ neg_pct }}%</div>
+    <div class="kpi-sub">{{ neg }} posts</div>
+  </div>
+  <div class="kpi-card" style="--kpi-color:var(--amber);">
+    <div class="kpi-label">Neutral</div>
+    <div class="kpi-value">{{ neu_pct }}%</div>
+    <div class="kpi-sub">{{ neu }} posts</div>
+  </div>
+  <div class="kpi-card" style="--kpi-color:var(--fear);">
+    <div class="kpi-label">Top Emotion</div>
+    <div class="kpi-value" style="font-size:1.3rem;">{{ top_emotion }}</div>
+    <div class="kpi-sub">dominant emotion detected</div>
+  </div>
+  <div class="kpi-card" style="--kpi-color:var(--blue-light);">
+    <div class="kpi-label">Avg Sentiment Score</div>
+    <div class="kpi-value" style="font-size:1.5rem;">{{ avg_score }}</div>
+    <div class="kpi-sub">VADER compound mean</div>
+  </div>
+</div>
+
+<!--  Sentiment + Emotion charts  -->
+<div class="grid-2 mb-24">
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21.21 15.89A10 10 0 118 2.83"/><path d="M22 12A10 10 0 0012 2v10z"/></svg>
+        Sentiment Distribution
+      </span>
+    </div>
+    <div class="card-body">
+      <div id="chart-sentiment" class="plotly-chart"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+        Emotion Breakdown
+      </span>
+    </div>
+    <div class="card-body">
+      <div id="chart-emotion" class="plotly-chart"></div>
+    </div>
+  </div>
+</div>
+
+<!--  Cross analysis heatmap  -->
+<div class="card mb-24">
+  <div class="card-header">
+    <span class="card-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Emotion x Sentiment Cross-Analysis
+    </span>
+    <span style="font-size:0.78rem;color:var(--text-muted);">Which emotions drive each sentiment?</span>
+  </div>
+  <div class="card-body">
+    <div id="chart-heatmap" style="min-height:300px;"></div>
+  </div>
+</div>
+
+<!--  Subreddit engagement  -->
+<div class="card mb-24">
+  <div class="card-header">
+    <span class="card-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Subreddit Engagement
+    </span>
+    <span style="font-size:0.78rem;color:var(--text-muted);">Top communities by total comments</span>
+  </div>
+  <div class="card-body">
+    <div id="chart-subreddit" style="min-height:280px;"></div>
+  </div>
+</div>
+
+<!--  Trending topics + posts  -->
+<div class="grid-2 mb-24" style="align-items:start;">
+
+  <!-- Trending topics -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        Trending Topics
+      </span>
+    </div>
+    <div class="card-body">
+      {% if topics %}
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        {% for word, count in topics %}
+        {% if forloop.counter <= 4 %}
+          <span style="background:var(--red-pale);color:var(--red);border:1px solid #fca5a5;
+                       border-radius:20px;padding:5px 13px;font-size:0.8rem;font-weight:600;">
+            {{ word }} <span style="opacity:0.6;font-weight:400;font-family:var(--font-mono);">{{ count }}</span>
+          </span>
+        {% elif forloop.counter <= 8 %}
+          <span style="background:var(--amber-pale);color:var(--amber);border:1px solid #fde68a;
+                       border-radius:20px;padding:5px 13px;font-size:0.8rem;font-weight:500;">
+            {{ word }} <span style="opacity:0.6;font-weight:400;font-family:var(--font-mono);">{{ count }}</span>
+          </span>
+        {% else %}
+          <span style="background:var(--bg-base);color:var(--text-secondary);border:1px solid var(--border-strong);
+                       border-radius:20px;padding:5px 13px;font-size:0.8rem;">
+            {{ word }} <span style="opacity:0.5;font-family:var(--font-mono);">{{ count }}</span>
+          </span>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state" style="padding:30px;"><p>No topic data available.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Sentiment score distribution chart -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Sentiment by Community
+      </span>
+    </div>
+    <div class="card-body">
+      <div id="chart-sent-sub" style="min-height:260px;"></div>
+    </div>
+  </div>
+</div>
+
+<!--  Top posts table  -->
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Top Analysed Posts
+    </span>
+    <span style="font-size:0.78rem;color:var(--text-muted);">Ranked by Reddit score</span>
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Post Title</th>
+          <th>Subreddit</th>
+          <th>Score</th>
+          <th>Comments</th>
+          <th>Sentiment</th>
+          <th>Emotion</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for post in top_posts %}
+        <tr>
+          <td style="max-width:320px;">
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                        font-size:0.85rem;" title="{{ post.title }}">
+              {{ post.title|truncatechars:90 }}
+            </div>
+          </td>
+          <td>
+            <span style="font-family:var(--font-mono);font-size:0.78rem;color:var(--blue);">
+              r/{{ post.subreddit }}
+            </span>
+          </td>
+          <td class="mono">{{ post.score }}</td>
+          <td class="mono">{{ post.comments }}</td>
+          <td>
+            <span class="badge badge-{{ post.sentiment }}">
+              {% if post.sentiment == 'positive' %}^{% elif post.sentiment == 'negative' %}v{% else %}--{% endif %}
+              {{ post.sentiment|capfirst }}
+            </span>
+          </td>
+          <td>
+            <span class="emo-dot emo-{{ post.emotion }}"></span>
+            {{ post.emotion|capfirst }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+//  Plotly config 
+const CFG  = {responsive: true, displayModeBar: false};
+const FONT = {family: 'IBM Plex Sans, sans-serif', size: 12, color: '#52556a'};
+const BG   = 'rgba(0,0,0,0)';
+const LAY  = {
+  paper_bgcolor: BG, plot_bgcolor: BG,
+  font: FONT, margin: {t:10, b:40, l:10, r:10},
+  legend: {bgcolor: 'rgba(0,0,0,0)'}
+};
+
+//  Sentiment donut 
+const sentData = {{ sent_json|safe }};
+Plotly.newPlot('chart-sentiment', [{
+  type: 'pie', hole: 0.55,
+  labels: sentData.map(d=>d.label),
+  values: sentData.map(d=>d.value),
+  marker: { colors: ['#16a34a','#dc2626','#d97706'] },
+  textinfo: 'percent+label',
+  textfont: {size: 12},
+  hovertemplate: '<b>%{label}</b><br>%{value} posts (%{percent})<extra></extra>'
+}], {...LAY, margin:{t:10,b:10,l:10,r:10}, showlegend: true,
+     legend:{orientation:'h',y:-0.1}}, CFG);
+
+//  Emotion bar 
+const emoData  = {{ emotion_data|safe }};
+const EMO_COL  = {Joy:'#ca8a04',Anger:'#dc2626',Sadness:'#2563eb',
+                  Fear:'#7c3aed',Surprise:'#0891b2',Disgust:'#65a30d',Neutral:'#6b7280'};
+Plotly.newPlot('chart-emotion', [{
+  type: 'bar', orientation: 'h',
+  x: emoData.map(d=>d.value),
+  y: emoData.map(d=>d.label),
+  marker: { color: emoData.map(d=>EMO_COL[d.label]||'#6b7280') },
+  hovertemplate: '<b>%{y}</b>: %{x} posts<extra></extra>'
+}], {...LAY, xaxis:{gridcolor:'#e5e7eb',showgrid:true},
+     yaxis:{automargin:true}, margin:{t:10,b:30,l:80,r:10}}, CFG);
+
+//  Cross-analysis heatmap 
+const crossRaw = {{ cross_data|safe }};
+const sentCats = [...new Set(crossRaw.map(d=>d.sentiment))];
+const emoCats  = [...new Set(crossRaw.map(d=>d.emotion))].map(e=>e.charAt(0).toUpperCase()+e.slice(1));
+const zMatrix  = emoCats.map(emo => sentCats.map(sent => {
+  const row = crossRaw.find(d=>d.sentiment===sent && d.emotion===emo.toLowerCase());
+  return row ? row.count : 0;
+}));
+Plotly.newPlot('chart-heatmap', [{
+  type:'heatmap', z:zMatrix, x:sentCats, y:emoCats,
+  colorscale:'Blues', showscale:true,
+  text:zMatrix, texttemplate:'%{text}',
+  hovertemplate:'Sentiment: %{x}<br>Emotion: %{y}<br>Count: %{z}<extra></extra>'
+}], {...LAY, margin:{t:10,b:50,l:80,r:10}}, CFG);
+
+//  Subreddit engagement 
+const subData = {{ subreddit_data|safe }};
+Plotly.newPlot('chart-subreddit', [{
+  type:'bar',
+  x: subData.map(d=>'r/'+d.subreddit),
+  y: subData.map(d=>d.total_comments),
+  marker:{color:'#1d4ed8', opacity:0.8},
+  hovertemplate:'<b>r/%{x}</b><br>Comments: %{y}<extra></extra>'
+}], {...LAY, xaxis:{tickangle:-30,automargin:true},
+     yaxis:{gridcolor:'#e5e7eb'},margin:{t:10,b:80,l:50,r:10}}, CFG);
+
+//  Sentiment per subreddit stacked 
+const subSentData = {{ subreddit_data|safe }};
+const subs = subData.map(d=>'r/'+d.subreddit);
+Plotly.newPlot('chart-sent-sub', [
+  {type:'bar', name:'Posts', x:subs,
+   y:subData.map(d=>d.posts),
+   marker:{color:'#3b82f6'},
+   hovertemplate:'<b>%{x}</b><br>Posts: %{y}<extra></extra>'}
+], {...LAY, xaxis:{tickangle:-35,automargin:true},
+     yaxis:{gridcolor:'#e5e7eb'},margin:{t:10,b:80,l:50,r:10},
+     legend:{orientation:'h',y:-0.3}}, CFG);
+</script>
+{% endblock %}
