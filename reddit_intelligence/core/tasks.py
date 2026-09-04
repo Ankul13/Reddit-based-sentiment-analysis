@@ -115,49 +115,67 @@ def run_analysis_task(job_id: int):
 
         _update(job_id, 'emotion', 80, f'Results saved locally → {final_path}')
 
-        # ── Step 6 — HDFS upload ──────────────────────────────────────────
-        _update(job_id, 'hdfs', 82, 'Uploading raw, clean, and results to HDFS…')
+        # Step 6 - HDFS upload
+        _update(job_id, 'hdfs', 82, 'Uploading raw, clean, and results to HDFS...')
 
-        try:
-            import subprocess
-            for local, hdfs_dir in [
-                (raw_path,    '/reddit_data/raw'),
-                (clean_path,  '/reddit_data/clean'),
-                (final_path,  '/reddit_data/results'),
-            ]:
-                subprocess.run(['hadoop', 'fs', '-mkdir', '-p', hdfs_dir],
-                               capture_output=True, timeout=30)
-                subprocess.run(['hadoop', 'fs', '-put', '-f', local, hdfs_dir],
-                               capture_output=True, timeout=60)
-            _update(job_id, 'hdfs', 90, 'HDFS upload complete')
-        except Exception as hdfs_err:
-            _update(job_id, 'hdfs', 90, f'HDFS note: {str(hdfs_err)[:80]}')
+        import shutil
+        hadoop_ok = False
 
-        # ── Step 7 — Hive ─────────────────────────────────────────────────
-        _update(job_id, 'hive', 92, 'Creating Hive external table over results…')
+        if shutil.which('hadoop'):
+            try:
+                for local, hdfs_dir in [
+                    (raw_path,    '/reddit_data/raw'),
+                    (clean_path,  '/reddit_data/clean'),
+                    (final_path,  '/reddit_data/results'),
+                ]:
+                    subprocess.run(['hadoop', 'fs', '-mkdir', '-p', hdfs_dir],
+                                   capture_output=True, timeout=30)
+                    r = subprocess.run(['hadoop', 'fs', '-put', '-f', local, hdfs_dir],
+                                       capture_output=True, timeout=60)
+                hadoop_ok = True
+                _update(job_id, 'hdfs', 90, 'HDFS upload complete')
+            except Exception as hdfs_err:
+                _update(job_id, 'hdfs', 90, f'HDFS error: {str(hdfs_err)[:120]}')
+        else:
+            _update(job_id, 'hdfs', 90,
+                    'Hadoop not on PATH. Start Hadoop first, then run: bash upload_to_hdfs.sh')
 
-        try:
-            import subprocess
-            hql = f"""
-            CREATE DATABASE IF NOT EXISTS reddit_analysis;
-            USE reddit_analysis;
-            DROP TABLE IF EXISTS reddit_results;
-            CREATE EXTERNAL TABLE reddit_results (
-                id STRING, title STRING, text STRING, cleaned_text STRING,
-                subreddit STRING, score INT, comments INT, created_utc DOUBLE,
-                sentiment STRING, sentiment_score DOUBLE,
-                emotion STRING, emotion_score DOUBLE
-            )
-            ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-            STORED AS TEXTFILE
-            LOCATION '/reddit_data/results'
-            TBLPROPERTIES ('skip.header.line.count'='1');
-            """
-            subprocess.run(['hive', '-e', hql],
-                           capture_output=True, timeout=120)
-            _update(job_id, 'hive', 97, 'Hive table created — ready for SQL queries')
-        except Exception as hive_err:
-            _update(job_id, 'hive', 97, f'Hive note: {str(hive_err)[:80]}')
+        # Step 7 - Hive table
+        _update(job_id, 'hive', 92, 'Creating Hive external table...')
+
+        if shutil.which('hive') and hadoop_ok:
+            try:
+                hql = (
+                    "CREATE DATABASE IF NOT EXISTS reddit_analysis; "
+                    "USE reddit_analysis; "
+                    "DROP TABLE IF EXISTS reddit_results; "
+                    "CREATE EXTERNAL TABLE reddit_results ("
+                    "id STRING, title STRING, text STRING, cleaned_text STRING, "
+                    "subreddit STRING, score INT, comments INT, created_utc DOUBLE, "
+                    "sentiment STRING, sentiment_score DOUBLE, "
+                    "emotion STRING, emotion_score DOUBLE"
+                    ") ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' "
+                    "STORED AS TEXTFILE "
+                    "LOCATION '/reddit_data/results' "
+                    "TBLPROPERTIES ('skip.header.line.count'='1');"
+                )
+                result = subprocess.run(['hive', '-e', hql],
+                                        capture_output=True, text=True, timeout=180)
+                if result.returncode == 0:
+                    _update(job_id, 'hive', 97, 'Hive table created successfully')
+                else:
+                    NOISE = ('SLF4J', 'log4j', 'WARN', 'INFO', 'Hive Session', 'OK', 'Time taken')
+                    real_err = '\n'.join(
+                        l for l in result.stderr.split('\n')
+                        if l.strip() and not any(n in l for n in NOISE)
+                    )
+                    _update(job_id, 'hive', 97,
+                            f'Hive warning: {real_err[:200]}' if real_err else 'Hive step done')
+            except Exception as hive_err:
+                _update(job_id, 'hive', 97, f'Hive error: {str(hive_err)[:120]}')
+        else:
+            _update(job_id, 'hive', 97,
+                    'Hive skipped - start Hive metastore, then run: hive -f hive_queries.sql')
 
         # ── Step 8 — Save results to Django DB ───────────────────────────
         _update(job_id, 'complete', 99, 'Saving results to database…')

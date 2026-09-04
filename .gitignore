@@ -1,4 +1,27 @@
-venv/
+# Secrets / configuration
+config.json
+secrets.json
+.env
+.env.*
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+
+# Virtual environment
+venv/
+.venv/
+
+# Database / local state
+*.sqlite3
+metastore_db/
+
+# Data
 data/
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
